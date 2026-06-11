@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <group
+        android:scaleX="0.04"
+        android:scaleY="0.04"
+        android:translateX="1.76"
+        android:translateY="1.76">
+
+        <!-- The clip-path arrow has been scaled up by 1.5x from its center
+             to dramatically improve visibility at tiny notification sizes. -->
+        <clip-path
+            android:pathData="
+                M-100,-100 h712 v712 h-712 z
+                M 331.0,295.0 L 169.0,295.0 Q 151.0,295.0 151.0,313.0 L 151.0,319.0 Q 151.0,337.0 169.0,337.0 L 331.0,337.0 Q 349.0,337.0 349.0,319.0 L 349.0,313.0 Q 349.0,295.0 331.0,295.0 Z
+                M 236.8,88.0 L 164.2,154.0 Q 151.0,166.0 163.6,178.6 L 168.4,183.4 Q 181.0,196.0 194.2,184.0 L 215.8,164.5 Q 229.0,152.5 229.0,170.5 L 229.0,232.0 Q 229.0,250.0 247.0,250.0 L 253.0,250.0 Q 271.0,250.0 271.0,232.0 L 271.0,170.5 Q 271.0,152.5 284.2,164.5 L 305.8,184.0 Q 319.0,196.0 331.6,183.4 L 336.4,178.6 Q 349.0,166.0 335.8,154.0 L 263.2,88.0 Q 250.0,76.0 236.8,88.0 Z" />
+
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M156.4,329.1C69.9,329.1 0,255.4 0,164.6S69.9,0 156.4,0h162.7c86.4,0 156.4,73.8 156.4,164.6s-69.9,164.6-156.4,164.6z"/>
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M261.8,395.6V496c0,8.7 -7,16 -15.5,16 -4.1,0 -8.1,-1.7 -10.9,-4.7L83,350.2c-29.9,-30.5 -46.4,-72.3 -46.4,-115.6 0,-89.1 69.9,-161.4 156.4,-161.4h162.7c86.4,0 156.4,72.4 156.4,161.4S442.1,396 355.6,396h-93.8z"/>
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M155.6,329.1h163.1c86.6,0 156.7,-75.5 156.7,-168.4 0,-11 -1.1,-21.6 -2.8,-32.2 -28.5,-34.1 -70.1,-55.4 -116.2,-55.4H193.3c-86.6,0 -156.7,75.5 -156.7,168.4 0,11 1.1,21.6 2.8,31.9 28.5,34.1 70.1,55.7 116.2,55.7z"/>
+    </group>
+</vector>

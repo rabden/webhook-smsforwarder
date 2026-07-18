@@ -18,8 +18,6 @@ val TextSecondary = Color(0xFF94A3B8)
 val TextMuted = Color(0xFF475569)
 
 val AccentNeon = Color(0xFF22D3EE) // Cyan-400
-val AccentGlow = Color(0xFF22D3EE).copy(alpha = 0.3f)
 val AccentSubtle = Color(0xFF22D3EE).copy(alpha = 0.08f)
 
 val ErrorRed = Color(0xFFFF4D4D)
-val SuccessGreen = Color(0xFF00FF9D)

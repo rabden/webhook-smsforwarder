@@ -22,9 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rabden.smsforwarder.data.MessageLog
 import com.rabden.smsforwarder.ui.theme.*
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.rabden.smsforwarder.util.formatTimestamp
 
 @Composable
 fun LogsScreen(
@@ -110,7 +108,7 @@ fun LogItem(log: MessageLog, shape: Shape, onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = formatTimestamp(context, log.timestamp),
+                        text = formatTimestamp(context, log.timestamp, "MMM dd, yyyy HH:mm:ss", "MMM dd, yyyy hh:mm:ss a"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp)
@@ -169,7 +167,7 @@ fun LogDetailDialog(log: MessageLog, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 DetailField(label = "Sender", value = log.sender)
-                DetailField(label = "Timestamp", value = formatTimestamp(context, log.timestamp))
+                DetailField(label = "Timestamp", value = formatTimestamp(context, log.timestamp, "MMM dd, yyyy HH:mm:ss", "MMM dd, yyyy hh:mm:ss a"))
                 DetailField(label = "Status", value = log.status, isStatus = true)
                 
                 Column {
@@ -244,9 +242,4 @@ fun DetailField(label: String, value: String, isStatus: Boolean = false) {
     }
 }
 
-private fun formatTimestamp(context: android.content.Context, timestamp: Long): String {
-    val is24Hour = android.text.format.DateFormat.is24HourFormat(context)
-    val pattern = if (is24Hour) "MMM dd, yyyy HH:mm:ss" else "MMM dd, yyyy hh:mm:ss a"
-    val sdf = SimpleDateFormat(pattern, Locale.getDefault())
-    return sdf.format(Date(timestamp))
-}
+

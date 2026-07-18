@@ -26,7 +26,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.util.Date
+import com.rabden.smsforwarder.ui.components.ListCard
+import com.rabden.smsforwarder.util.formatTimestamp
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, onNavigateToOptimization: (String) -> Unit) {
@@ -365,7 +366,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onNavigateToOptimization: (Stri
                         StatusItem(
                             icon = Icons.Default.History,
                             label = "Last forward",
-                            value = if (uiState.lastForwardedTime == 0L) "Never" else formatTime(context, uiState.lastForwardedTime),
+                            value = if (uiState.lastForwardedTime == 0L) "Never" else formatTimestamp(context, uiState.lastForwardedTime, "HH:mm", "hh:mm a"),
                             modifier = Modifier.weight(1f),
                             showRipple = false
                         )
@@ -602,49 +603,4 @@ fun BrandOptimizationScreen(
     }
 }
 
-@Composable
-fun PremiumCard(
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
-    onClick: (() -> Unit)? = null,
-    showRipple: Boolean = true,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
-    ) {
-        Column(
-            modifier = Modifier
-                .then(if (onClick != null) Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = if (showRipple) androidx.compose.foundation.LocalIndication.current else null, onClick = onClick) else Modifier)
-                .padding(20.dp),
-            content = content
-        )
-    }
-}
 
-@Composable
-fun ListCard(
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
-    shape: Shape = RoundedCornerShape(28.dp),
-    onClick: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = shape,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        onClick = onClick ?: {}
-    ) {
-        Column(modifier = Modifier.padding(20.dp), content = content)
-    }
-}
-
-private fun formatTime(context: android.content.Context, timestamp: Long): String {
-    val is24Hour = android.text.format.DateFormat.is24HourFormat(context)
-    val pattern = if (is24Hour) "HH:mm" else "hh:mm a"
-    val sdf = java.text.SimpleDateFormat(pattern, java.util.Locale.getDefault())
-    return sdf.format(Date(timestamp))
-}

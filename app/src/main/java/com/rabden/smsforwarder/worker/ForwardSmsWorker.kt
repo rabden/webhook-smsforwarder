@@ -4,12 +4,11 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.rabden.smsforwarder.data.AppDatabase
 import com.rabden.smsforwarder.network.WebhookPayload
 import com.rabden.smsforwarder.network.WebhookService
 import com.rabden.smsforwarder.repository.SettingsRepository
+import com.rabden.smsforwarder.util.parseHeaders
 import kotlinx.coroutines.flow.first
 
 class ForwardSmsWorker(
@@ -83,12 +82,4 @@ class ForwardSmsWorker(
         }
     }
 
-    private fun parseHeaders(json: String): Map<String, String> {
-        return try {
-            val type = object : TypeToken<Map<String, String>>() {}.type
-            Gson().fromJson(json, type) ?: emptyMap()
-        } catch (e: Exception) {
-            emptyMap()
-        }
-    }
 }

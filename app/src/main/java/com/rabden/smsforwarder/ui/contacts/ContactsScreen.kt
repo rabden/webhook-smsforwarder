@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rabden.smsforwarder.ui.components.ListCard
 import com.rabden.smsforwarder.ui.theme.*
 import java.util.Locale
 
@@ -307,24 +308,6 @@ fun CustomContactItem(number: String, shape: Shape, onClick: () -> Unit) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             )
         }
-    }
-}
-
-@Composable
-fun ListCard(
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
-    shape: Shape = RoundedCornerShape(28.dp),
-    onClick: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = shape,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        onClick = onClick ?: {}
-    ) {
-        Column(modifier = Modifier.padding(20.dp), content = content)
     }
 }
 

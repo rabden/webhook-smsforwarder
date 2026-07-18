@@ -4,9 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.rabden.smsforwarder.repository.SettingsRepository
 import com.rabden.smsforwarder.util.PermissionHelper
+import com.rabden.smsforwarder.util.parseHeaders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -75,15 +75,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val lastTime: Long?,
         val device: String
     )
-
-    private fun parseHeaders(json: String): Map<String, String> {
-        return try {
-            val type = object : TypeToken<Map<String, String>>() {}.type
-            gson.fromJson(json, type) ?: emptyMap()
-        } catch (e: Exception) {
-            emptyMap()
-        }
-    }
 
     private fun serializeHeaders(headers: Map<String, String>): String {
         return gson.toJson(headers)

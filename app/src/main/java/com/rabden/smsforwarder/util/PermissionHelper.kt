@@ -61,10 +61,6 @@ object PermissionHelper {
     }
 
     fun getAllRequiredPermissions(): Array<String> {
-        val all = mutableListOf<String>()
-        all.addAll(SMS_PERMISSIONS)
-        all.addAll(CONTACTS_PERMISSION)
-        all.addAll(NOTIFICATION_PERMISSION)
-        return all.toTypedArray()
+        return SMS_PERMISSIONS + CONTACTS_PERMISSION + NOTIFICATION_PERMISSION
     }
 }

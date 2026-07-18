@@ -21,4 +21,7 @@ interface MessageLogDao {
 
     @Query("DELETE FROM message_logs")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM message_logs WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: Set<Long>)
 }

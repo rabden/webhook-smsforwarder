@@ -38,7 +38,8 @@ import java.util.Locale
 
 @Composable
 fun ContactsScreen(
-    viewModel: ContactsViewModel
+    viewModel: ContactsViewModel,
+    autoOpenAddDialog: Boolean = false
 ) {
     val customContacts by viewModel.customContacts.collectAsState()
     
@@ -51,6 +52,10 @@ fun ContactsScreen(
     var selectedContact by remember { mutableStateOf<String?>(null) }
     
     val context = LocalContext.current
+
+    LaunchedEffect(autoOpenAddDialog) {
+        if (autoOpenAddDialog) showAddDialog = true
+    }
 
     fun handleAddRequest(number: String) {
         val trimmed = number.trim()

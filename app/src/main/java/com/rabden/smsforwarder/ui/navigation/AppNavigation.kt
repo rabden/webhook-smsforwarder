@@ -5,64 +5,49 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Textsms
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.rabden.smsforwarder.ui.contacts.ContactsScreen
 import com.rabden.smsforwarder.ui.contacts.ContactsViewModel
 import com.rabden.smsforwarder.ui.logs.LogsScreen
 import com.rabden.smsforwarder.ui.logs.LogsViewModel
 import com.rabden.smsforwarder.ui.settings.SettingsScreen
 import com.rabden.smsforwarder.ui.settings.SettingsViewModel
-import com.rabden.smsforwarder.ui.theme.*
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    data object Contacts : Screen("contacts", "Whitelist", Icons.Default.Contacts)
-    data object Logs : Screen("logs", "Messages", Icons.Default.Textsms)
-    data object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+object Routes {
+    const val LOGS = "logs"
+    const val SETTINGS = "settings?focusWebhook={focusWebhook}"
+    const val BRAND_OPTIMIZATION = "brand_optimization/{brandName}"
 }
-
-val bottomNavItems = listOf(
-    Screen.Contacts,
-    Screen.Logs,
-    Screen.Settings
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation() {
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
-    
-    // Check if we should show Contacts (Whitelist) first. 
-    // Default is true for the very first run.
-    val showContactsFirst = remember { 
-        val isFirstRun = sharedPrefs.getBoolean("first_run_completed", false).not()
-        if (isFirstRun) {
-            sharedPrefs.edit().putBoolean("first_run_completed", true).apply()
-        }
-        isFirstRun
-    }
+    val haptic = LocalHapticFeedback.current
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = navBackStackEntry?.destination
-    val currentRoute = navBackStackEntry?.destination?.route ?: (if (showContactsFirst) Screen.Contacts.route else Screen.Logs.route)
+    val currentDestination = navBackStackEntry?.destination?.route ?: Routes.LOGS
 
     // Activity-scoped ViewModels: Pre-instantiated to ensure "Warm State"
     // even when the UI screens are dismounted.
@@ -70,57 +55,62 @@ fun AppNavigation() {
     val contactsViewModel: ContactsViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
 
-    var showClearLogsDialog by remember { mutableStateOf(false) }
+    val logs by logsViewModel.logs.collectAsState()
+    val selectedIds by logsViewModel.selectedIds.collectAsState()
+    val isSelectionMode = selectedIds.isNotEmpty()
 
-    if (showClearLogsDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearLogsDialog = false },
-            title = { Text("Clear All Logs") },
-            text = { Text("Are you sure you want to permanently delete all message logs? This action cannot be undone.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        logsViewModel.clearAllLogs()
-                        showClearLogsDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Clear All")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearLogsDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
+    val settingsUiState by settingsViewModel.uiState.collectAsState()
+    val hasWebhookUrl = settingsUiState.webhookUrl.isNotBlank()
+    val contacts by contactsViewModel.customContacts.collectAsState()
+
+    var showWhitelistSheet by remember { mutableStateOf(false) }
+    var autoOpenAddDialog by remember { mutableStateOf(false) }
+
+    // First run: auto-open whitelist so the user adds numbers.
+    LaunchedEffect(Unit) {
+        if (!sharedPrefs.getBoolean("first_run_completed", false)) {
+            sharedPrefs.edit().putBoolean("first_run_completed", true).apply()
+            showWhitelistSheet = true
+        }
     }
+
+    val isMainScreen = currentDestination == Routes.LOGS
+    val isSettingsScreen = currentDestination.startsWith("settings")
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            val isBottomNavScreen = bottomNavItems.any { it.route == currentRoute }
-            val title = if (isBottomNavScreen) {
-                bottomNavItems.find { it.route == currentRoute }?.title ?: "Forwarder"
-            } else if (currentRoute.startsWith("brand_optimization/")) {
-                val brandName = navBackStackEntry?.arguments?.getString("brandName") ?: "Device"
-                "$brandName Optimization"
-            } else {
-                "Forwarder"
+            val title = when {
+                isMainScreen && isSelectionMode -> "${selectedIds.size} selected"
+                isMainScreen -> "Messages"
+                currentDestination.startsWith("brand_optimization/") -> {
+                    val brandName = navBackStackEntry?.arguments?.getString("brandName") ?: "Device"
+                    "$brandName Optimization"
+                }
+                isSettingsScreen -> "Settings"
+                else -> "Forwarder"
             }
+
             TopAppBar(
-                title = { 
+                title = {
                     Text(
                         title,
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.SemiBold
                         )
-                    ) 
+                    )
                 },
                 navigationIcon = {
-                    if (!isBottomNavScreen) {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    when {
+                        isMainScreen && isSelectionMode -> {
+                            IconButton(onClick = { logsViewModel.clearSelection() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Exit selection")
+                            }
+                        }
+                        !isMainScreen -> {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
                         }
                     }
                 },
@@ -129,71 +119,101 @@ fun AppNavigation() {
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 ),
                 actions = {
-                    if (currentRoute == Screen.Logs.route) {
-                        IconButton(onClick = { showClearLogsDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Clear All")
+                    when {
+                        isMainScreen && isSelectionMode -> {
+                            val allSelected = logs.isNotEmpty() && selectedIds.size == logs.size
+                            IconButton(onClick = {
+                                if (allSelected) logsViewModel.clearSelection()
+                                else logsViewModel.selectAll()
+                            }) {
+                                Icon(
+                                    if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
+                                    contentDescription = if (allSelected) "Deselect all" else "Select all"
+                                )
+                            }
+                            IconButton(onClick = { logsViewModel.deleteSelected() }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        isMainScreen -> {
+                            IconButton(onClick = { navController.navigate("settings?focusWebhook=false") }) {
+                                Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            }
                         }
                     }
                 }
             )
         },
-        bottomBar = {
-            val isBottomNavScreen = bottomNavItems.any { it.route == currentRoute }
-            if (isBottomNavScreen) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp
-                ) {
-                    bottomNavItems.forEach { screen ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                            label = { Text(screen.title, style = MaterialTheme.typography.labelSmall) },
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                    }
-                }
+        floatingActionButton = {
+            if (isMainScreen && !isSelectionMode) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        autoOpenAddDialog = false
+                        showWhitelistSheet = true
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                    icon = { Icon(Icons.Default.Contacts, contentDescription = null) },
+                    text = { Text("Whitelist") },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             }
         }
     ) { innerPadding ->
-        // Standard NavHost: Dismounts off-screen views for better resource management.
-        // Because the ViewModels are activity-scoped and data is "Eager", 
-        // the screens will still render almost instantly when navigated back to.
         NavHost(
             navController = navController,
-            startDestination = if (showContactsFirst) Screen.Contacts.route else Screen.Logs.route,
+            startDestination = Routes.LOGS,
             modifier = Modifier.padding(innerPadding).fillMaxSize()
         ) {
-            composable(Screen.Contacts.route) {
-                ContactsScreen(viewModel = contactsViewModel)
+            composable(Routes.LOGS) {
+                LogsScreen(
+                    viewModel = logsViewModel,
+                    hasWebhookUrl = hasWebhookUrl,
+                    hasContacts = contacts.isNotEmpty(),
+                    onConfigureWebhook = { navController.navigate("settings?focusWebhook=true") },
+                    onAddContact = {
+                        autoOpenAddDialog = true
+                        showWhitelistSheet = true
+                    }
+                )
             }
-            composable(Screen.Logs.route) {
-                LogsScreen(viewModel = logsViewModel)
-            }
-            composable(Screen.Settings.route) {
+            composable(
+                route = Routes.SETTINGS,
+                arguments = listOf(navArgument("focusWebhook") { type = NavType.StringType; defaultValue = "false" })
+            ) { backStackEntry ->
+                val focusWebhook = backStackEntry.arguments?.getString("focusWebhook")?.toBoolean() ?: false
                 SettingsScreen(
                     viewModel = settingsViewModel,
+                    focusWebhookUrl = focusWebhook,
                     onNavigateToOptimization = { brandName ->
                         navController.navigate("brand_optimization/$brandName")
                     }
                 )
             }
-            composable("brand_optimization/{brandName}") { backStackEntry ->
+            composable(Routes.BRAND_OPTIMIZATION) { backStackEntry ->
                 val brandName = backStackEntry.arguments?.getString("brandName") ?: "OTHER"
                 com.rabden.smsforwarder.ui.settings.BrandOptimizationScreen(
                     brandName = brandName,
                     onBackClick = { navController.popBackStack() }
                 )
             }
+        }
+    }
+
+    if (showWhitelistSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                showWhitelistSheet = false
+                autoOpenAddDialog = false
+            },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            ContactsScreen(
+                viewModel = contactsViewModel,
+                autoOpenAddDialog = autoOpenAddDialog
+            )
         }
     }
 }

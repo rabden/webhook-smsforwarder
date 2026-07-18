@@ -1,6 +1,7 @@
 package com.rabden.smsforwarder.ui.logs
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -8,58 +9,54 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Textsms
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rabden.smsforwarder.data.MessageLog
-import com.rabden.smsforwarder.ui.theme.*
+import com.rabden.smsforwarder.ui.components.ListCard
 import com.rabden.smsforwarder.util.formatTimestamp
 
 @Composable
 fun LogsScreen(
-    viewModel: LogsViewModel
+    viewModel: LogsViewModel,
+    hasWebhookUrl: Boolean,
+    hasContacts: Boolean,
+    onConfigureWebhook: () -> Unit,
+    onAddContact: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     val logs by viewModel.logs.collectAsState()
+    val selectedIds by viewModel.selectedIds.collectAsState()
+    val isSelectionMode = selectedIds.isNotEmpty()
     var selectedLog by remember { mutableStateOf<MessageLog?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (logs.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Delete, 
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "No Logs Detected",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            EmptyLogsState(
+                hasWebhookUrl = hasWebhookUrl,
+                hasContacts = hasContacts,
+                onConfigureWebhook = onConfigureWebhook,
+                onAddContact = onAddContact
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                itemsIndexed(logs) { index, log ->
+                itemsIndexed(logs, key = { _, log -> log.id }) { index, log ->
                     val shape = when {
                         logs.size == 1 -> RoundedCornerShape(28.dp)
                         index == 0 -> RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
@@ -67,9 +64,15 @@ fun LogsScreen(
                         else -> RoundedCornerShape(8.dp)
                     }
                     LogItem(
-                        log = log, 
+                        log = log,
                         shape = shape,
-                        onClick = { selectedLog = log }
+                        isSelected = log.id in selectedIds,
+                        isSelectionMode = isSelectionMode,
+                        onClick = {
+                            if (isSelectionMode) viewModel.toggleSelection(log.id)
+                            else selectedLog = log
+                        },
+                        onLongPress = { viewModel.toggleSelection(log.id) }
                     )
                 }
             }
@@ -85,14 +88,124 @@ fun LogsScreen(
 }
 
 @Composable
-fun LogItem(log: MessageLog, shape: Shape, onClick: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+fun EmptyLogsState(
+    hasWebhookUrl: Boolean,
+    hasContacts: Boolean,
+    onConfigureWebhook: () -> Unit,
+    onAddContact: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+    ) {
+        if (!hasWebhookUrl) {
+            SetupCard(
+                icon = Icons.Default.Link,
+                title = "No webhook URL configured",
+                message = "Add a webhook destination URL in settings to start forwarding messages.",
+                ctaText = "Configure Webhook",
+                onCtaClick = onConfigureWebhook
+            )
+        }
+        if (!hasContacts) {
+            SetupCard(
+                icon = Icons.Default.Contacts,
+                title = "No whitelisted contacts",
+                message = "Add contacts whose messages should be forwarded.",
+                ctaText = "Add Contacts",
+                onCtaClick = onAddContact
+            )
+        }
+        if (hasWebhookUrl && hasContacts) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Textsms,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(48.dp)
+                )
+                Text(
+                    text = "No messages forwarded yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Forwarded messages will appear here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SetupCard(
+    icon: ImageVector,
+    title: String,
+    message: String,
+    ctaText: String,
+    onCtaClick: () -> Unit
+) {
+    ListCard {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Button(onClick = onCtaClick) {
+                Text(ctaText)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LogItem(
+    log: MessageLog,
+    shape: Shape,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    val context = LocalContext.current
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
         shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainer
         )
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -105,7 +218,8 @@ fun LogItem(log: MessageLog, shape: Shape, onClick: () -> Unit) {
                     Text(
                         text = log.sender,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = formatTimestamp(context, log.timestamp, "MMM dd, yyyy HH:mm:ss", "MMM dd, yyyy hh:mm:ss a"),
@@ -114,29 +228,19 @@ fun LogItem(log: MessageLog, shape: Shape, onClick: () -> Unit) {
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
-                
-                Surface(
-                    color = when (log.status) {
-                        "SUCCESS" -> MaterialTheme.colorScheme.primaryContainer
-                        "PENDING" -> MaterialTheme.colorScheme.tertiaryContainer
-                        else -> MaterialTheme.colorScheme.errorContainer
-                    },
-                    shape = RoundedCornerShape(4.dp)
-                ) {
-                    val textColor = when (log.status) {
-                        "SUCCESS" -> MaterialTheme.colorScheme.onPrimaryContainer
-                        "PENDING" -> MaterialTheme.colorScheme.onTertiaryContainer
-                        else -> MaterialTheme.colorScheme.onErrorContainer
-                    }
-                    Text(
-                        text = log.status,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = textColor
+
+                if (isSelectionMode) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
+                } else {
+                    StatusBadge(status = log.status)
                 }
             }
-            
+
             Text(
                 text = log.message,
                 style = MaterialTheme.typography.bodyMedium,
@@ -150,8 +254,31 @@ fun LogItem(log: MessageLog, shape: Shape, onClick: () -> Unit) {
 }
 
 @Composable
+fun StatusBadge(status: String) {
+    Surface(
+        color = when (status) {
+            "SUCCESS" -> MaterialTheme.colorScheme.primaryContainer
+            "PENDING" -> MaterialTheme.colorScheme.tertiaryContainer
+            else -> MaterialTheme.colorScheme.errorContainer
+        },
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Text(
+            text = status,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = when (status) {
+                "SUCCESS" -> MaterialTheme.colorScheme.onPrimaryContainer
+                "PENDING" -> MaterialTheme.colorScheme.onTertiaryContainer
+                else -> MaterialTheme.colorScheme.onErrorContainer
+            }
+        )
+    }
+}
+
+@Composable
 fun LogDetailDialog(log: MessageLog, onDismiss: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -169,7 +296,7 @@ fun LogDetailDialog(log: MessageLog, onDismiss: () -> Unit) {
                 DetailField(label = "Sender", value = log.sender)
                 DetailField(label = "Timestamp", value = formatTimestamp(context, log.timestamp, "MMM dd, yyyy HH:mm:ss", "MMM dd, yyyy hh:mm:ss a"))
                 DetailField(label = "Status", value = log.status, isStatus = true)
-                
+
                 Column {
                     Text(
                         text = "Full Message",
@@ -241,5 +368,3 @@ fun DetailField(label: String, value: String, isStatus: Boolean = false) {
         }
     }
 }
-
-

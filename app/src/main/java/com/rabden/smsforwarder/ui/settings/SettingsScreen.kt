@@ -30,7 +30,7 @@ import com.rabden.smsforwarder.ui.components.ListCard
 import com.rabden.smsforwarder.util.formatTimestamp
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onNavigateToOptimization: (String) -> Unit) {
+fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = false, onNavigateToOptimization: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     var webhookUrlInput by remember { mutableStateOf(uiState.webhookUrl) }
     var hasUnsavedChanges by remember { mutableStateOf(false) }
@@ -40,10 +40,17 @@ fun SettingsScreen(viewModel: SettingsViewModel, onNavigateToOptimization: (Stri
     val context = androidx.compose.ui.platform.LocalContext.current
     var showReliabilityWarning by remember { mutableStateOf(false) }
     val isAggressive = com.rabden.smsforwarder.util.BrandHelper.isAggressiveBrand()
+    val webhookFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(uiState.webhookUrl) {
         if (!hasUnsavedChanges) {
             webhookUrlInput = uiState.webhookUrl
+        }
+    }
+
+    LaunchedEffect(focusWebhookUrl) {
+        if (focusWebhookUrl) {
+            webhookFocusRequester.requestFocus()
         }
     }
     
@@ -123,7 +130,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, onNavigateToOptimization: (Stri
                             placeholder = { Text("https://url.com") },
                             leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(webhookFocusRequester),
                             shape = CircleShape,
                             colors = TextFieldDefaults.colors(
                                 focusedIndicatorColor = Color.Transparent,

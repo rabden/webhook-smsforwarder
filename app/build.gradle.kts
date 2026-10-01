@@ -10,7 +10,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.rabden.smsforwarder"
+        applicationId = "com.aistudio.smsforwarder.jxdqwt"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -20,6 +20,12 @@ android {
     }
 
     signingConfigs {
+        create("debugConfig") {
+            storeFile = file("${rootDir}/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             storeFile = file("src/main/key-store.jks")
             storePassword = "MDRHJ123123j"
@@ -32,6 +38,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debugConfig")
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")

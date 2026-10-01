@@ -13,7 +13,6 @@ import retrofit2.http.Url
 data class WebhookPayload(
     @SerializedName("sender") val sender: String,
     @SerializedName("message") val message: String,
-    @SerializedName("sim") val sim: String,
     @SerializedName("device") val device: String
 )
 

@@ -1,10 +1,18 @@
 package com.rabden.smsforwarder.ui.logs
 
 import android.app.Application
+import androidx.work.Constraints
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rabden.smsforwarder.data.AppDatabase
 import com.rabden.smsforwarder.data.MessageLog
+import com.rabden.smsforwarder.worker.ForwardSmsWorker
+import com.rabden.smsforwarder.worker.LogSmsWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +56,30 @@ class LogsViewModel(application: Application) : AndroidViewModel(application) {
     fun clearAllLogs() {
         viewModelScope.launch {
             dao.deleteAll()
+        }
+    }
+
+    fun retry(log: MessageLog) {
+        viewModelScope.launch {
+            dao.updateStatus(log.id, "PENDING")
+
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val inputData = Data.Builder()
+                .putLong(LogSmsWorker.EXTRA_LOG_ID, log.id)
+                .build()
+            val request = OneTimeWorkRequestBuilder<ForwardSmsWorker>()
+                .setInputData(inputData)
+                .setConstraints(constraints)
+                .build()
+
+            WorkManager.getInstance(getApplication<Application>())
+                .enqueueUniqueWork(
+                    "manual_retry_${log.id}",
+                    ExistingWorkPolicy.REPLACE,
+                    request
+                )
         }
     }
 }

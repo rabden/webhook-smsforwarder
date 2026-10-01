@@ -17,3 +17,4 @@ local.properties
 /app/release.keystore
 /app/src/main/key-store.jks
 *.hprof
+.opencode/

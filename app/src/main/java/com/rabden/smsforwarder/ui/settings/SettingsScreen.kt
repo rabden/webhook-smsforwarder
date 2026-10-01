@@ -26,11 +26,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.rabden.smsforwarder.ui.components.ListCard
 import com.rabden.smsforwarder.util.formatTimestamp
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = false, onNavigateToOptimization: (String) -> Unit) {
+fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = false, contentTopPadding: Dp = 0.dp, onNavigateToOptimization: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     var webhookUrlInput by remember { mutableStateOf(uiState.webhookUrl) }
     var hasUnsavedChanges by remember { mutableStateOf(false) }
@@ -76,7 +77,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
                 })
             }
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(start = 10.dp, end = 10.dp, top = contentTopPadding + 20.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // 1. Forwarding Group (switch + url + device)
@@ -264,7 +265,73 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
             }
         }
 
-        // 2. Custom Headers
+        // 2. Filter Mode
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Filter Mode", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
+            
+            val filterMode = uiState.filterMode
+
+            val whitelistInnerCorner by animateDpAsState(
+                targetValue = if (filterMode == "whitelist") 28.dp else 8.dp,
+                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
+                label = "whitelistInnerCorner"
+            )
+            val blacklistInnerCorner by animateDpAsState(
+                targetValue = if (filterMode == "blacklist") 28.dp else 8.dp,
+                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
+                label = "blacklistInnerCorner"
+            )
+            val whitelistWeight by animateFloatAsState(
+                targetValue = if (filterMode == "whitelist") 1.3f else 1f,
+                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
+                label = "whitelistWeight"
+            )
+            val blacklistWeight by animateFloatAsState(
+                targetValue = if (filterMode == "blacklist") 1.3f else 1f,
+                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
+                label = "blacklistWeight"
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    ListCard(
+                        onClick = { viewModel.setFilterMode("whitelist") },
+                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = whitelistInnerCorner, bottomStart = 28.dp, bottomEnd = whitelistInnerCorner),
+                        containerColor = if (filterMode == "whitelist") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.weight(whitelistWeight)
+                    ) {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "Whitelist",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (filterMode == "whitelist") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    ListCard(
+                        onClick = { viewModel.setFilterMode("blacklist") },
+                        shape = RoundedCornerShape(topStart = blacklistInnerCorner, topEnd = 28.dp, bottomStart = blacklistInnerCorner, bottomEnd = 28.dp),
+                        containerColor = if (filterMode == "blacklist") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.weight(blacklistWeight)
+                    ) {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "Blacklist",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (filterMode == "blacklist") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Custom Headers
         var showAddHeaderDialog by remember { mutableStateOf(false) }
         
         if (showAddHeaderDialog) {
@@ -345,7 +412,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
             }
         }
 
-        // 3. Reliability & Optimization Group
+        // 4. Reliability & Optimization Group
         val brand = com.rabden.smsforwarder.util.BrandHelper.getDeviceBrand()
         val showBrandOptimization = brand != com.rabden.smsforwarder.util.BrandHelper.Brand.OTHER && brand != com.rabden.smsforwarder.util.BrandHelper.Brand.PIXEL
 
@@ -485,6 +552,7 @@ fun StatusItem(
 @Composable
 fun BrandOptimizationScreen(
     brandName: String,
+    contentTopPadding: Dp = 0.dp,
     onBackClick: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -501,7 +569,7 @@ fun BrandOptimizationScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .padding(start = 24.dp, end = 24.dp, top = contentTopPadding + 24.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // Hero Card or Header

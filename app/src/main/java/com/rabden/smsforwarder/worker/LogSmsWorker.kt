@@ -35,11 +35,20 @@ class LogSmsWorker(
                 return Result.success()
             }
 
+            val mode = contactRepository.filterMode.first()
             val customContacts = contactRepository.customNumbers.first()
-            
-            if (!shouldForward(sender, customContacts)) {
-                Log.d("LogSmsWorker", "Sender $sender not in whitelist or disabled")
-                return Result.success()
+
+            if (mode == "blacklist") {
+                val blacklistContacts = contactRepository.blacklistNumbers.first()
+                if (isBlacklisted(sender, blacklistContacts)) {
+                    Log.d("LogSmsWorker", "Sender $sender is blacklisted")
+                    return Result.success()
+                }
+            } else {
+                if (!shouldForward(sender, customContacts)) {
+                    Log.d("LogSmsWorker", "Sender $sender not in whitelist or disabled")
+                    return Result.success()
+                }
             }
 
             val webhookUrl = settingsRepository.webhookUrl.first()
@@ -86,6 +95,16 @@ class LogSmsWorker(
         // Check custom whitelist
         return customContacts.any { watched ->
             normalizePhoneNumber(watched) == normalizedSender
+        }
+    }
+
+    private fun isBlacklisted(
+        sender: String,
+        blacklistContacts: Set<String>
+    ): Boolean {
+        val normalizedSender = normalizePhoneNumber(sender)
+        return blacklistContacts.any { blocked ->
+            normalizePhoneNumber(blocked) == normalizedSender
         }
     }
 

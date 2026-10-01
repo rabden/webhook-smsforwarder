@@ -1,8 +1,18 @@
 package com.rabden.smsforwarder.ui.navigation
 
-import android.content.Context
+import android.view.HapticFeedbackConstants
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -11,13 +21,17 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -34,6 +48,7 @@ import com.rabden.smsforwarder.ui.settings.SettingsViewModel
 
 object Routes {
     const val LOGS = "logs"
+    const val CONTACTS = "contacts"
     const val SETTINGS = "settings?focusWebhook={focusWebhook}"
     const val BRAND_OPTIMIZATION = "brand_optimization/{brandName}"
 }
@@ -42,15 +57,12 @@ object Routes {
 @Composable
 fun AppNavigation() {
     val context = LocalContext.current
-    val sharedPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
-    val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination?.route ?: Routes.LOGS
 
-    // Activity-scoped ViewModels: Pre-instantiated to ensure "Warm State"
-    // even when the UI screens are dismounted.
     val logsViewModel: LogsViewModel = viewModel()
     val contactsViewModel: ContactsViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
@@ -62,20 +74,32 @@ fun AppNavigation() {
     val settingsUiState by settingsViewModel.uiState.collectAsState()
     val hasWebhookUrl = settingsUiState.webhookUrl.isNotBlank()
     val contacts by contactsViewModel.customContacts.collectAsState()
+    val isContactsScreen = currentDestination == Routes.CONTACTS
+    val isContactsSelecting by contactsViewModel.isSelectionMode.collectAsState()
+    val isBlacklistSelecting by contactsViewModel.isBlacklistSelectionMode.collectAsState()
+    val selectedContactsList by contactsViewModel.selectedContacts.collectAsState()
+    val selectedBlacklistList by contactsViewModel.selectedBlacklistContacts.collectAsState()
 
-    var showWhitelistSheet by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showContactsDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showBlacklistDeleteConfirmDialog by remember { mutableStateOf(false) }
     var autoOpenAddDialog by remember { mutableStateOf(false) }
+    var showContactSettingsSheet by remember { mutableStateOf(false) }
 
-    // First run: auto-open whitelist so the user adds numbers.
-    LaunchedEffect(Unit) {
-        if (!sharedPrefs.getBoolean("first_run_completed", false)) {
-            sharedPrefs.edit().putBoolean("first_run_completed", true).apply()
-            showWhitelistSheet = true
+    val logsListState = rememberLazyListState()
+    val fabExpanded by remember {
+        derivedStateOf {
+            logsListState.firstVisibleItemIndex == 0 && logsListState.firstVisibleItemScrollOffset < 50
         }
     }
 
     val isMainScreen = currentDestination == Routes.LOGS
-    val isSettingsScreen = currentDestination.startsWith("settings")
+
+    BackHandler(enabled = isMainScreen && isSelectionMode) {
+        logsViewModel.clearSelection()
+    }
+
+    var topPad by remember { mutableStateOf(0.dp) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -83,11 +107,14 @@ fun AppNavigation() {
             val title = when {
                 isMainScreen && isSelectionMode -> "${selectedIds.size} selected"
                 isMainScreen -> "Messages"
+                isContactsScreen && isContactsSelecting -> "${selectedContactsList.size} selected"
+                isContactsScreen && isBlacklistSelecting -> "${selectedBlacklistList.size} selected"
+                isContactsScreen -> "Contacts"
                 currentDestination.startsWith("brand_optimization/") -> {
                     val brandName = navBackStackEntry?.arguments?.getString("brandName") ?: "Device"
                     "$brandName Optimization"
                 }
-                isSettingsScreen -> "Settings"
+                currentDestination.startsWith("settings") -> "Settings"
                 else -> "Forwarder"
             }
 
@@ -107,6 +134,14 @@ fun AppNavigation() {
                                 Icon(Icons.Default.Close, contentDescription = "Exit selection")
                             }
                         }
+                        isContactsScreen && (isContactsSelecting || isBlacklistSelecting) -> {
+                            IconButton(onClick = {
+                                contactsViewModel.clearSelection()
+                                contactsViewModel.clearBlacklistSelection()
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Exit selection")
+                            }
+                        }
                         !isMainScreen -> {
                             IconButton(onClick = { navController.popBackStack() }) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -115,7 +150,7 @@ fun AppNavigation() {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = Color.Transparent,
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 ),
                 actions = {
@@ -131,8 +166,43 @@ fun AppNavigation() {
                                     contentDescription = if (allSelected) "Deselect all" else "Select all"
                                 )
                             }
-                            IconButton(onClick = { logsViewModel.deleteSelected() }) {
+                            IconButton(onClick = { showDeleteConfirmDialog = true }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        isContactsScreen && isContactsSelecting -> {
+                            val allContactsSelected = contacts.isNotEmpty() && selectedContactsList.size == contacts.size
+                            IconButton(onClick = {
+                                if (allContactsSelected) contactsViewModel.clearSelection()
+                                else contactsViewModel.selectAll()
+                            }) {
+                                Icon(
+                                    if (allContactsSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
+                                    contentDescription = if (allContactsSelected) "Deselect all" else "Select all"
+                                )
+                            }
+                            IconButton(onClick = { showContactsDeleteConfirmDialog = true }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        isContactsScreen && isBlacklistSelecting -> {
+                            val allBlacklistSelected = selectedBlacklistList.isNotEmpty() && selectedBlacklistList.size == contacts.size
+                            IconButton(onClick = {
+                                if (allBlacklistSelected) contactsViewModel.clearBlacklistSelection()
+                                else contactsViewModel.selectAllBlacklist()
+                            }) {
+                                Icon(
+                                    if (allBlacklistSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
+                                    contentDescription = if (allBlacklistSelected) "Deselect all" else "Select all"
+                                )
+                            }
+                            IconButton(onClick = { showBlacklistDeleteConfirmDialog = true }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        isContactsScreen -> {
+                            IconButton(onClick = { showContactSettingsSheet = true }) {
+                                Icon(Icons.Default.Tune, contentDescription = "Filter Settings")
                             }
                         }
                         isMainScreen -> {
@@ -147,73 +217,194 @@ fun AppNavigation() {
         floatingActionButton = {
             if (isMainScreen && !isSelectionMode) {
                 ExtendedFloatingActionButton(
+                    expanded = fabExpanded,
                     onClick = {
-                        autoOpenAddDialog = false
-                        showWhitelistSheet = true
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        navController.navigate(Routes.CONTACTS)
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     },
                     icon = { Icon(Icons.Default.Contacts, contentDescription = null) },
-                    text = { Text("Whitelist") },
+                    text = { Text("Contacts") },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Routes.LOGS,
-            modifier = Modifier.padding(innerPadding).fillMaxSize()
-        ) {
-            composable(Routes.LOGS) {
-                LogsScreen(
-                    viewModel = logsViewModel,
-                    hasWebhookUrl = hasWebhookUrl,
-                    hasContacts = contacts.isNotEmpty(),
-                    onConfigureWebhook = { navController.navigate("settings?focusWebhook=true") },
-                    onAddContact = {
-                        autoOpenAddDialog = true
-                        showWhitelistSheet = true
+        topPad = innerPadding.calculateTopPadding()
+        val bottomPad = innerPadding.calculateBottomPadding()
+        val background = MaterialTheme.colorScheme.background
+
+        Box(Modifier.fillMaxSize()) {
+            NavHost(
+                navController = navController,
+                startDestination = Routes.LOGS,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = bottomPad),
+                enterTransition = {
+                    slideIntoContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                        animationSpec = tween(300)
+                    )
+                },
+                exitTransition = {
+                    slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                        animationSpec = tween(300)
+                    )
+                },
+                popEnterTransition = {
+                    slideIntoContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                        animationSpec = tween(300)
+                    )
+                },
+                popExitTransition = {
+                    slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                        animationSpec = tween(300)
+                    )
+                }
+            ) {
+                composable(Routes.LOGS) {
+                    LogsScreen(
+                        viewModel = logsViewModel,
+                        hasWebhookUrl = hasWebhookUrl,
+                        hasContacts = contacts.isNotEmpty(),
+                        onConfigureWebhook = { navController.navigate("settings?focusWebhook=true") },
+                        onAddContact = {
+                            autoOpenAddDialog = true
+                            navController.navigate(Routes.CONTACTS)
+                        },
+                        contentTopPadding = topPad,
+                        listState = logsListState
+                    )
+                }
+                composable(Routes.CONTACTS) {
+                    BackHandler(enabled = isContactsSelecting || isBlacklistSelecting) {
+                        contactsViewModel.clearSelection()
+                        contactsViewModel.clearBlacklistSelection()
                     }
-                )
+                    ContactsScreen(
+                        viewModel = contactsViewModel,
+                        contentTopPadding = topPad,
+                        autoOpenAddDialog = autoOpenAddDialog,
+                        showSettingsSheet = showContactSettingsSheet,
+                        onSettingsSheetDismiss = { showContactSettingsSheet = false }
+                    )
+                    LaunchedEffect(Unit) { autoOpenAddDialog = false }
+                }
+                composable(
+                    route = Routes.SETTINGS,
+                    arguments = listOf(navArgument("focusWebhook") { type = NavType.StringType; defaultValue = "false" })
+                ) { backStackEntry ->
+                    val focusWebhook = backStackEntry.arguments?.getString("focusWebhook")?.toBoolean() ?: false
+                    SettingsScreen(
+                        viewModel = settingsViewModel,
+                        focusWebhookUrl = focusWebhook,
+                        contentTopPadding = topPad,
+                        onNavigateToOptimization = { brandName ->
+                            navController.navigate("brand_optimization/$brandName")
+                        }
+                    )
+                }
+                composable(Routes.BRAND_OPTIMIZATION) { backStackEntry ->
+                    val brandName = backStackEntry.arguments?.getString("brandName") ?: "OTHER"
+                    com.rabden.smsforwarder.ui.settings.BrandOptimizationScreen(
+                        brandName = brandName,
+                        contentTopPadding = topPad,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
             }
-            composable(
-                route = Routes.SETTINGS,
-                arguments = listOf(navArgument("focusWebhook") { type = NavType.StringType; defaultValue = "false" })
-            ) { backStackEntry ->
-                val focusWebhook = backStackEntry.arguments?.getString("focusWebhook")?.toBoolean() ?: false
-                SettingsScreen(
-                    viewModel = settingsViewModel,
-                    focusWebhookUrl = focusWebhook,
-                    onNavigateToOptimization = { brandName ->
-                        navController.navigate("brand_optimization/$brandName")
-                    }
-                )
-            }
-            composable(Routes.BRAND_OPTIMIZATION) { backStackEntry ->
-                val brandName = backStackEntry.arguments?.getString("brandName") ?: "OTHER"
-                com.rabden.smsforwarder.ui.settings.BrandOptimizationScreen(
-                    brandName = brandName,
-                    onBackClick = { navController.popBackStack() }
-                )
-            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(topPad)
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to background,
+                            0.4f to background.copy(alpha = 0.9f),
+                            0.7f to background.copy(alpha = 0.5f),
+                            0.9f to background.copy(alpha = 0.1f),
+                            1.0f to Color.Transparent
+                        )
+                    )
+            )
         }
     }
 
-    if (showWhitelistSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = {
-                showWhitelistSheet = false
-                autoOpenAddDialog = false
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Delete Messages") },
+            text = { Text("Are you sure you want to permanently delete ${selectedIds.size} message(s)? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        logsViewModel.deleteSelected()
+                        showDeleteConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
             },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        ) {
-            ContactsScreen(
-                viewModel = contactsViewModel,
-                autoOpenAddDialog = autoOpenAddDialog
-            )
-        }
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showContactsDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showContactsDeleteConfirmDialog = false },
+            title = { Text("Delete Contacts") },
+            text = { Text("Are you sure you want to delete ${selectedContactsList.size} contact(s)?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        contactsViewModel.deleteSelected()
+                        showContactsDeleteConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showContactsDeleteConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showBlacklistDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showBlacklistDeleteConfirmDialog = false },
+            title = { Text("Delete Blacklisted Contacts") },
+            text = { Text("Are you sure you want to delete ${selectedBlacklistList.size} contact(s)?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        contactsViewModel.deleteSelectedBlacklist()
+                        showBlacklistDeleteConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlacklistDeleteConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

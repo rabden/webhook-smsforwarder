@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.rabden.smsforwarder.repository.ContactRepository
 import com.rabden.smsforwarder.repository.SettingsRepository
 import com.rabden.smsforwarder.util.PermissionHelper
 import com.rabden.smsforwarder.util.parseHeaders
@@ -23,11 +24,13 @@ data class SettingsUiState(
     val lastForwardedTime: Long = 0L,
     val isBatteryOptimizationIgnored: Boolean = false,
     val deviceName: String = "",
-    val customHeaders: Map<String, String> = emptyMap()
+    val customHeaders: Map<String, String> = emptyMap(),
+    val filterMode: String = "whitelist"
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SettingsRepository(application)
+    private val contactRepository = ContactRepository(application)
     private val gson = Gson()
     
     private val _isBatteryOptimizationIgnored = MutableStateFlow(false)
@@ -55,8 +58,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             Quint(url, enabled, isHighRel, lastTime, device)
         },
         repository.customHeaders,
-        _isBatteryOptimizationIgnored
-    ) { quint, headersJson, batteryIgnored ->
+        _isBatteryOptimizationIgnored,
+        contactRepository.filterMode
+    ) { quint, headersJson, batteryIgnored, mode ->
         SettingsUiState(
             webhookUrl = quint.url,
             isForwardingEnabled = quint.enabled,
@@ -64,7 +68,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             lastForwardedTime = quint.lastTime ?: 0L,
             isBatteryOptimizationIgnored = batteryIgnored,
             deviceName = quint.device,
-            customHeaders = parseHeaders(headersJson)
+            customHeaders = parseHeaders(headersJson),
+            filterMode = mode
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState())
 
@@ -135,6 +140,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val current = uiState.value.customHeaders.toMutableMap()
             current.remove(key)
             repository.updateCustomHeaders(serializeHeaders(current))
+        }
+    }
+
+    fun setFilterMode(mode: String) {
+        viewModelScope.launch {
+            contactRepository.setFilterMode(mode)
         }
     }
 }

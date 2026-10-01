@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.rabden.smsforwarder.ui.components.ListCard
 
 @Composable
 fun PermissionRequestScreen(onGrantClick: () -> Unit) {
@@ -24,14 +25,14 @@ fun PermissionRequestScreen(onGrantClick: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(16.dp)
+            .padding(top = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Hero Section
         Surface(
-            modifier = Modifier.size(80.dp),
-            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.size(96.dp),
+            shape = RoundedCornerShape(32.dp),
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
@@ -39,7 +40,7 @@ fun PermissionRequestScreen(onGrantClick: () -> Unit) {
                 Icon(
                     imageVector = Icons.Default.Shield,
                     contentDescription = null,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(48.dp)
                 )
             }
         }
@@ -47,7 +48,7 @@ fun PermissionRequestScreen(onGrantClick: () -> Unit) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Setup forwarding",
+            text = "Setup Forwarding",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -58,39 +59,48 @@ fun PermissionRequestScreen(onGrantClick: () -> Unit) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
+            modifier = Modifier.padding(top = 12.dp, bottom = 40.dp, start = 8.dp, end = 8.dp)
         )
 
-        // Permission Items
-        PermissionItem(
-            icon = Icons.Default.Sms,
-            title = "SMS",
-            description = "To capture incoming SMS and identify the receiving SIM card number."
-        )
+        // Permission Items Grouped
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            PermissionItem(
+                icon = Icons.Default.Sms,
+                title = "SMS Access",
+                description = "To capture incoming SMS and identify the receiving SIM card number.",
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
+            )
 
-        PermissionItem(
-            icon = Icons.Default.Contacts,
-            title = "Contacts",
-            description = "To allow you to select trusted senders from your whitelist."
-        )
+            PermissionItem(
+                icon = Icons.Default.Contacts,
+                title = "Contacts",
+                description = "To allow you to select trusted senders from your whitelist.",
+                shape = RoundedCornerShape(8.dp)
+            )
 
-        PermissionItem(
-            icon = Icons.Default.Notifications,
-            title = "Notifications",
-            description = "To keep you informed about the forwarding service status."
-        )
+            PermissionItem(
+                icon = Icons.Default.Notifications,
+                title = "Notifications",
+                description = "To keep you informed about the forwarding service status.",
+                shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 28.dp, bottomEnd = 28.dp)
+            )
+        }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = onGrantClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(64.dp)
+                .padding(bottom = 8.dp),
+            shape = RoundedCornerShape(20.dp)
         ) {
             Text(
-                "Continue to setup",
-                style = MaterialTheme.typography.titleMedium
+                "Continue",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
         }
     }
@@ -100,40 +110,45 @@ fun PermissionRequestScreen(onGrantClick: () -> Unit) {
 private fun PermissionItem(
     icon: ImageVector,
     title: String,
-    description: String
+    description: String,
+    shape: RoundedCornerShape
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Surface(
-            modifier = Modifier.size(48.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
-            }
-        }
-
-        Column(
+    ListCard(shape = shape) {
+        Row(
             modifier = Modifier
-                .padding(start = 16.dp)
-                .weight(1f)
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }

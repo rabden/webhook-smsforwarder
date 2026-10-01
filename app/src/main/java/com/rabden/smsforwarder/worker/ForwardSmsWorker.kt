@@ -43,7 +43,6 @@ class ForwardSmsWorker(
             val payload = WebhookPayload(
                 sender = logEntry.sender,
                 message = logEntry.message,
-                sim = logEntry.sim,
                 device = logEntry.device
             )
 

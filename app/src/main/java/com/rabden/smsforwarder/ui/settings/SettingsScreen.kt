@@ -1,10 +1,13 @@
 package com.rabden.smsforwarder.ui.settings
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,24 +19,36 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import com.rabden.smsforwarder.ui.components.ListCard
+import com.rabden.smsforwarder.ui.components.ExpressiveFilterModeToggle
+import com.rabden.smsforwarder.ui.components.M3ExpressiveLoader
 import com.rabden.smsforwarder.util.formatTimestamp
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = false, contentTopPadding: Dp = 0.dp, onNavigateToOptimization: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     var webhookUrlInput by remember { mutableStateOf(uiState.webhookUrl) }
+    var deviceNameInput by remember { mutableStateOf(uiState.deviceName) }
     var hasUnsavedChanges by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var saveComplete by remember { mutableStateOf(false) }
@@ -42,6 +57,22 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
     var showReliabilityWarning by remember { mutableStateOf(false) }
     val isAggressive = com.rabden.smsforwarder.util.BrandHelper.isAggressiveBrand()
     val webhookFocusRequester = remember { FocusRequester() }
+
+    val testState by viewModel.testState.collectAsState()
+    var showErrorDialog by remember { mutableStateOf(false) }
+
+    val density = LocalDensity.current
+    var showTestButton by remember { mutableStateOf(false) }
+    var showTestText by remember { mutableStateOf(false) }
+    val revealThresholdPx = with(density) { 32.dp.toPx() }
+    val maxPullPx = with(density) { 60.dp.toPx() }
+    val revealWidth = 56.dp
+    val revealWidthPx = with(density) { revealWidth.toPx() }
+    val maxRubberBandPx = with(density) { 36.dp.toPx() }
+    val dragOffset = remember { Animatable(0f) }
+    var isRevealed by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val view = LocalView.current
 
     LaunchedEffect(uiState.webhookUrl) {
         if (!hasUnsavedChanges) {
@@ -52,6 +83,32 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
     LaunchedEffect(focusWebhookUrl) {
         if (focusWebhookUrl) {
             webhookFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(showTestText) {
+        if (showTestText) {
+            kotlinx.coroutines.delay(2500)
+            showTestText = false
+        }
+    }
+
+    LaunchedEffect(testState) {
+        if (testState is WebhookTestState.Success) {
+            kotlinx.coroutines.delay(2500)
+            isRevealed = false
+            showTestButton = false
+            showTestText = false
+            coroutineScope.launch {
+                dragOffset.animateTo(
+                    0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            }
+            viewModel.clearTestState()
         }
     }
     
@@ -65,6 +122,11 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.clearTestState()
+            isRevealed = false
+            showTestButton = false
+            showTestText = false
+            coroutineScope.launch { dragOffset.snapTo(0f) }
         }
     }
 
@@ -113,55 +175,170 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
                 }
 
                 ListCard(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .pointerInput(showTestButton) {
+                            detectHorizontalDragGestures(
+                                onDragStart = {},
+                                onDragEnd = {
+                                    coroutineScope.launch {
+                                        if (!showTestButton) {
+                                            if (dragOffset.value < -revealThresholdPx) {
+                                                showTestButton = true
+                                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            }
+                                        } else {
+                                            if (dragOffset.value > revealThresholdPx) {
+                                                showTestButton = false
+                                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            }
+                                        }
+                                        dragOffset.animateTo(
+                                            0f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessLow
+                                            )
+                                        )
+                                    }
+                                },
+                                onDragCancel = {
+                                    coroutineScope.launch {
+                                        dragOffset.animateTo(
+                                            0f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessLow
+                                            )
+                                        )
+                                    }
+                                },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    coroutineScope.launch {
+                                        val current = dragOffset.value
+                                        val target = if (!showTestButton) {
+                                            if (dragAmount < 0) {
+                                                if (current < -maxPullPx) {
+                                                    current + dragAmount * 0.2f
+                                                } else {
+                                                    current + dragAmount * 0.85f
+                                                }
+                                            } else {
+                                                current + dragAmount * 0.2f
+                                            }
+                                        } else {
+                                            if (dragAmount > 0) {
+                                                if (current > maxPullPx) {
+                                                    current + dragAmount * 0.2f
+                                                } else {
+                                                    current + dragAmount * 0.85f
+                                                }
+                                            } else {
+                                                current + dragAmount * 0.2f
+                                            }
+                                        }
+                                        dragOffset.snapTo(target)
+                                    }
+                                }
+                            )
+                        },
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset { IntOffset(dragOffset.value.roundToInt(), 0) },
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Text(
                             text = "Webhook destination URL",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 12.dp)
                         )
-                        TextField(
-                            value = webhookUrlInput,
-                            onValueChange = {
-                                webhookUrlInput = it
-                                hasUnsavedChanges = true
-                            },
-                            placeholder = { Text("https://url.com") },
-                            leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(webhookFocusRequester),
-                            shape = CircleShape,
-                            colors = TextFieldDefaults.colors(
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent,
-                                errorIndicatorColor = Color.Transparent
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = webhookUrlInput,
+                                onValueChange = {
+                                    webhookUrlInput = it
+                                    hasUnsavedChanges = true
+                                },
+                                placeholder = { Text("https://url.com") },
+                                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .focusRequester(webhookFocusRequester),
+                                shape = CircleShape,
+                                colors = TextFieldDefaults.colors(
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent,
+                                    errorIndicatorColor = Color.Transparent
+                                )
                             )
-                        )
+
+                            AnimatedVisibility(
+                                visible = showTestButton,
+                                enter = expandHorizontally(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                ) + fadeIn(),
+                                exit = shrinkHorizontally(
+                                    animationSpec = tween(250)
+                                ) + fadeOut()
+                            ) {
+                                WebhookTestButton(
+                                    testState = testState,
+                                    showLabel = showTestText,
+                                    onClick = {
+                                        if (testState is WebhookTestState.Failed) {
+                                            showErrorDialog = true
+                                        } else if (testState !is WebhookTestState.Running) {
+                                            viewModel.testWebhook(
+                                                url = webhookUrlInput.ifBlank { uiState.webhookUrl },
+                                                device = deviceNameInput.ifBlank { uiState.deviceName },
+                                                headers = uiState.customHeaders
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
 
-                var deviceNameInput by remember { mutableStateOf(uiState.deviceName) }
                 LaunchedEffect(uiState.deviceName) {
                     if (!hasUnsavedChanges) {
                         deviceNameInput = uiState.deviceName
                     }
                 }
 
-                val bottomCorner by animateDpAsState(
-                    targetValue = if (hasUnsavedChanges) 8.dp else 28.dp,
-                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
-                    label = "bottomCorner"
+                val saveInteractionSource = remember { MutableInteractionSource() }
+                val isSavePressed by saveInteractionSource.collectIsPressedAsState()
+                val saveTopCorner by animateDpAsState(
+                    targetValue = if (isSavePressed || isSaving || saveComplete) 28.dp else 8.dp,
+                    animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+                    label = "saveTopCorner"
                 )
+                val deviceBottomCorner by animateDpAsState(
+                    targetValue = if (!hasUnsavedChanges) 28.dp else saveTopCorner,
+                    animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+                    label = "deviceBottomCorner"
+                )
+
                 ListCard(
                     modifier = Modifier.zIndex(1f),
                     shape = RoundedCornerShape(
                         topStart = 8.dp, topEnd = 8.dp,
-                        bottomStart = bottomCorner, bottomEnd = bottomCorner
+                        bottomStart = deviceBottomCorner, bottomEnd = deviceBottomCorner
                     )
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -197,16 +374,33 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
                     enter = slideInVertically(initialOffsetY = { -it }),
                     exit = slideOutVertically(targetOffsetY = { -it })
                 ) {
+                    val savePressScale by animateFloatAsState(
+                        targetValue = if (isSavePressed) 0.95f else 1.0f,
+                        animationSpec = spring(dampingRatio = 0.52f, stiffness = 500f),
+                        label = "savePressScale"
+                    )
+
                     ListCard(
                         onClick = {
                             if (!isSaving && !saveComplete) {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                                 isSaving = true
                                 viewModel.updateWebhookUrl(webhookUrlInput)
                                 viewModel.updateDeviceName(deviceNameInput)
                             }
                         },
-                        shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                        interactionSource = saveInteractionSource,
+                        shape = RoundedCornerShape(
+                            topStart = saveTopCorner,
+                            topEnd = saveTopCorner,
+                            bottomStart = 28.dp,
+                            bottomEnd = 28.dp
+                        ),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = savePressScale
+                            scaleY = savePressScale
+                        }
                     ) {
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             AnimatedContent(
@@ -215,13 +409,19 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
                                     saveComplete -> "complete"
                                     else -> "idle"
                                 },
-                                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                                transitionSpec = {
+                                    (fadeIn(animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f)) +
+                                            scaleIn(initialScale = 0.85f, animationSpec = spring(dampingRatio = 0.65f, stiffness = 400f)))
+                                        .togetherWith(
+                                            fadeOut(animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f)) +
+                                                    scaleOut(targetScale = 0.85f, animationSpec = spring(dampingRatio = 0.65f, stiffness = 400f))
+                                        )
+                                },
                                 label = "saveState"
                             ) { state ->
                                 when (state) {
                                     "saving" -> {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
+                                        M3ExpressiveLoader(
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                     }
@@ -251,84 +451,39 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
 
                 LaunchedEffect(saveComplete) {
                     if (saveComplete) {
-                        kotlinx.coroutines.delay(1000)
+                        kotlinx.coroutines.delay(800)
                         saveComplete = false
                         hasUnsavedChanges = false
                         focusManager.clearFocus()
+                        if (webhookUrlInput.isNotBlank()) {
+                            showTestButton = true
+                            showTestText = true
+                        }
                     }
                 }
 
                 // Detect changes in both inputs
                 LaunchedEffect(webhookUrlInput, deviceNameInput) {
-                    hasUnsavedChanges = webhookUrlInput != uiState.webhookUrl || deviceNameInput != uiState.deviceName
+                    val urlChanged = webhookUrlInput != uiState.webhookUrl
+                    hasUnsavedChanges = urlChanged || deviceNameInput != uiState.deviceName
                 }
             }
         }
 
         // 2. Filter Mode
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Filter Mode", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
-            
-            val filterMode = uiState.filterMode
-
-            val whitelistInnerCorner by animateDpAsState(
-                targetValue = if (filterMode == "whitelist") 28.dp else 8.dp,
-                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                label = "whitelistInnerCorner"
+            Text(
+                "Filter Mode",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 8.dp),
+                fontWeight = FontWeight.Bold
             )
-            val blacklistInnerCorner by animateDpAsState(
-                targetValue = if (filterMode == "blacklist") 28.dp else 8.dp,
-                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                label = "blacklistInnerCorner"
+            ExpressiveFilterModeToggle(
+                selectedMode = uiState.filterMode,
+                onModeSelected = { viewModel.setFilterMode(it) },
+                showDescription = false
             )
-            val whitelistWeight by animateFloatAsState(
-                targetValue = if (filterMode == "whitelist") 1.3f else 1f,
-                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                label = "whitelistWeight"
-            )
-            val blacklistWeight by animateFloatAsState(
-                targetValue = if (filterMode == "blacklist") 1.3f else 1f,
-                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                label = "blacklistWeight"
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    ListCard(
-                        onClick = { viewModel.setFilterMode("whitelist") },
-                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = whitelistInnerCorner, bottomStart = 28.dp, bottomEnd = whitelistInnerCorner),
-                        containerColor = if (filterMode == "whitelist") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.weight(whitelistWeight)
-                    ) {
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Whitelist",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (filterMode == "whitelist") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    ListCard(
-                        onClick = { viewModel.setFilterMode("blacklist") },
-                        shape = RoundedCornerShape(topStart = blacklistInnerCorner, topEnd = 28.dp, bottomStart = blacklistInnerCorner, bottomEnd = 28.dp),
-                        containerColor = if (filterMode == "blacklist") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.weight(blacklistWeight)
-                    ) {
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Blacklist",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (filterMode == "blacklist") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
         }
 
         // 3. Custom Headers
@@ -369,20 +524,45 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
             
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val headerList = uiState.customHeaders.toList()
+                val addHeaderInteractionSource = remember { MutableInteractionSource() }
+                val isAddHeaderPressed by addHeaderInteractionSource.collectIsPressedAsState()
+                val addHeaderTopCorner by animateDpAsState(
+                    targetValue = if (isAddHeaderPressed) 28.dp else 8.dp,
+                    animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+                    label = "addHeaderTopCorner"
+                )
+                val addHeaderPressScale by animateFloatAsState(
+                    targetValue = if (isAddHeaderPressed) 0.95f else 1.0f,
+                    animationSpec = spring(dampingRatio = 0.52f, stiffness = 500f),
+                    label = "addHeaderPressScale"
+                )
+                val addHeaderIconRotation by animateFloatAsState(
+                    targetValue = if (isAddHeaderPressed) 90f else 0f,
+                    animationSpec = spring(dampingRatio = 0.55f, stiffness = 400f),
+                    label = "addHeaderIconRotation"
+                )
                 
                 if (headerList.isEmpty()) {
                     ListCard(
-                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
+                        shape = RoundedCornerShape(
+                            topStart = 28.dp,
+                            topEnd = 28.dp,
+                            bottomStart = addHeaderTopCorner,
+                            bottomEnd = addHeaderTopCorner
+                        )
                     ) {
                         Text("No custom headers configured", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     headerList.forEachIndexed { index, (key, value) ->
-                        val shape = if (index == 0) {
-                            RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
-                        } else {
-                            RoundedCornerShape(8.dp)
-                        }
+                        val isFirst = index == 0
+                        val isLast = index == headerList.size - 1
+                        val shape = RoundedCornerShape(
+                            topStart = if (isFirst) 28.dp else 8.dp,
+                            topEnd = if (isFirst) 28.dp else 8.dp,
+                            bottomStart = if (isLast) addHeaderTopCorner else 8.dp,
+                            bottomEnd = if (isLast) addHeaderTopCorner else 8.dp
+                        )
                         
                         ListCard(shape = shape) {
                             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -399,14 +579,43 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
                 }
 
                 ListCard(
-                    onClick = { showAddHeaderDialog = true },
-                    shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        showAddHeaderDialog = true
+                    },
+                    interactionSource = addHeaderInteractionSource,
+                    shape = RoundedCornerShape(
+                        topStart = addHeaderTopCorner,
+                        topEnd = addHeaderTopCorner,
+                        bottomStart = 28.dp,
+                        bottomEnd = 28.dp
+                    ),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = addHeaderPressScale
+                        scaleY = addHeaderPressScale
+                    }
                 ) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .graphicsLayer { rotationZ = addHeaderIconRotation },
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add custom header", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Add custom header",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -419,33 +628,46 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Reliability & Optimization", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                // Battery & Last Forward - now at top
+                // Battery Optimization
                 ListCard(
+                    onClick = {
+                        if (!uiState.isBatteryOptimizationIgnored) {
+                            com.rabden.smsforwarder.util.PermissionHelper.requestIgnoreBatteryOptimizations(context)
+                        } else {
+                            viewModel.refreshBatteryStatus()
+                        }
+                    },
                     shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
                 ) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        StatusItem(
-                            icon = if (uiState.isBatteryOptimizationIgnored) Icons.Default.CheckCircle else Icons.Default.BatteryAlert,
-                            label = "Battery",
-                            value = if (uiState.isBatteryOptimizationIgnored) "Optimized" else "Restricted",
-                            color = if (uiState.isBatteryOptimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.weight(1f),
-                            showRipple = true,
-                            onClick = {
-                                if (!uiState.isBatteryOptimizationIgnored) {
-                                    com.rabden.smsforwarder.util.PermissionHelper.requestIgnoreBatteryOptimizations(context)
-                                } else {
-                                    viewModel.refreshBatteryStatus()
-                                }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.isBatteryOptimizationIgnored) Icons.Default.CheckCircle else Icons.Default.BatteryAlert,
+                                contentDescription = null,
+                                tint = if (uiState.isBatteryOptimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Battery Optimization",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (uiState.isBatteryOptimizationIgnored) "Unrestricted (Optimized)" else "Restricted (Tap to optimize)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (uiState.isBatteryOptimizationIgnored) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+                                )
                             }
-                        )
-                        StatusItem(
-                            icon = Icons.Default.History,
-                            label = "Last forward",
-                            value = if (uiState.lastForwardedTime == 0L) "Never" else formatTimestamp(context, uiState.lastForwardedTime, "HH:mm", "hh:mm a"),
-                            modifier = Modifier.weight(1f),
-                            showRipple = false
-                        )
+                        }
                     }
                 }
 
@@ -522,6 +744,294 @@ fun SettingsScreen(viewModel: SettingsViewModel, focusWebhookUrl: Boolean = fals
             }
         }
     }
+
+    if (showErrorDialog && testState is WebhookTestState.Failed) {
+        WebhookErrorDialog(
+            errorState = testState as WebhookTestState.Failed,
+            onDismiss = { showErrorDialog = false },
+            onRetry = {
+                showErrorDialog = false
+                viewModel.testWebhook(
+                    url = webhookUrlInput.ifBlank { uiState.webhookUrl },
+                    device = deviceNameInput.ifBlank { uiState.deviceName },
+                    headers = uiState.customHeaders
+                )
+            }
+        )
+    }
+}
+
+@Composable
+fun WebhookTestButton(
+    testState: WebhookTestState,
+    showLabel: Boolean = false,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val containerColor by animateColorAsState(
+        targetValue = when (testState) {
+            is WebhookTestState.Running -> MaterialTheme.colorScheme.primaryContainer
+            is WebhookTestState.Success -> Color(0xFF2E7D32).copy(alpha = 0.22f)
+            is WebhookTestState.Failed -> MaterialTheme.colorScheme.errorContainer
+            is WebhookTestState.Idle -> MaterialTheme.colorScheme.secondaryContainer
+        },
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "testBtnContainer"
+    )
+
+    val contentColor by animateColorAsState(
+        targetValue = when (testState) {
+            is WebhookTestState.Running -> MaterialTheme.colorScheme.primary
+            is WebhookTestState.Success -> Color(0xFF2E7D32)
+            is WebhookTestState.Failed -> MaterialTheme.colorScheme.error
+            is WebhookTestState.Idle -> MaterialTheme.colorScheme.onSecondaryContainer
+        },
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "testBtnContent"
+    )
+
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = containerColor,
+        contentColor = contentColor,
+        modifier = modifier
+            .height(52.dp)
+            .defaultMinSize(minWidth = 52.dp)
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = if (showLabel) 16.dp else 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(24.dp)) {
+                when (testState) {
+                    is WebhookTestState.Running -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.5.dp,
+                            color = contentColor
+                        )
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Running test...",
+                            tint = contentColor,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                    is WebhookTestState.Success -> {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Test successful",
+                            tint = contentColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    is WebhookTestState.Failed -> {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = "Test failed. Tap to see error details.",
+                            tint = contentColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    is WebhookTestState.Idle -> {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Test Webhook",
+                            tint = contentColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = showLabel,
+                enter = expandHorizontally(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ) + fadeIn(),
+                exit = shrinkHorizontally(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ) + fadeOut()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Test",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WebhookErrorDialog(
+    errorState: WebhookTestState.Failed,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.ErrorOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+        },
+        title = {
+            Text(
+                text = "Webhook Test Failed",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (errorState.statusCode != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = "HTTP Status Code: ${errorState.statusCode}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = errorState.errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Target Webhook URL",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = errorState.testedUrl.ifBlank { "None" },
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
+                if (!errorState.responseBody.isNullOrBlank()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Server Response Body",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = errorState.responseBody,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier
+                                    .padding(10.dp)
+                                    .heightIn(max = 140.dp)
+                                    .verticalScroll(rememberScrollState())
+                            )
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Troubleshooting Tips:",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val tip = when {
+                        errorState.statusCode == 404 -> "• The requested URL route does not exist. Verify the endpoint path."
+                        errorState.statusCode in listOf(401, 403) -> "• Authentication failed. Check your custom HTTP headers and API tokens."
+                        errorState.statusCode != null && errorState.statusCode >= 500 -> "• The webhook destination server encountered an internal error."
+                        errorState.errorMessage.contains("resolve host", ignoreCase = true) -> "• Domain name couldn't be resolved. Check for typos in the hostname."
+                        errorState.errorMessage.contains("Connection refused", ignoreCase = true) -> "• Server refused connection. Ensure your server is running on the specified port."
+                        errorState.errorMessage.contains("timed out", ignoreCase = true) -> "• Request timed out. Ensure the server firewall allows external HTTP POST traffic."
+                        else -> "• Ensure device has network connectivity and the destination accepts raw JSON POST requests."
+                    }
+                    Text(
+                        text = tip,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onDismiss) {
+                    Text("Close")
+                }
+                Button(
+                    onClick = onRetry
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Retry")
+                }
+            }
+        }
+    )
 }
 
 @Composable

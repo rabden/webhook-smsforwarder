@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rabden.smsforwarder.data.MessageLog
+import com.rabden.smsforwarder.ui.components.PromptCard
 import com.rabden.smsforwarder.util.formatTimestamp
 
 fun groupShape(index: Int, total: Int): Shape = when {
@@ -165,57 +166,6 @@ fun NoMessagesState(contentTopPadding: Dp) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
-    }
-}
-
-@Composable
-fun PromptCard(
-    icon: ImageVector,
-    title: String,
-    message: String,
-    ctaText: String,
-    shape: Shape,
-    onCtaClick: () -> Unit
-) {
-    Card(
-        onClick = onCtaClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = shape,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(onClick = onCtaClick) {
-                    Text(ctaText)
-                }
-            }
-        }
     }
 }
 

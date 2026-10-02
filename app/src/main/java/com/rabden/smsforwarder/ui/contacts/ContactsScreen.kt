@@ -45,6 +45,12 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.sp
 import com.rabden.smsforwarder.ui.components.ListCard
+import com.rabden.smsforwarder.ui.components.PromptCard
+import com.rabden.smsforwarder.ui.components.ExpressiveFilterModeToggle
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import com.rabden.smsforwarder.ui.theme.*
 import java.util.Locale
 
@@ -77,6 +83,7 @@ fun ContactsScreen(
     var selectedContact by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+    val density = LocalDensity.current
 
     val pagerState = rememberPagerState(pageCount = { 2 }, initialPage = selectedTab)
 
@@ -84,7 +91,10 @@ fun ContactsScreen(
         if (pagerState.currentPage != selectedTab) {
             pagerState.animateScrollToPage(
                 page = selectedTab,
-                animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f)
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = 380f
+                )
             )
         }
     }
@@ -151,33 +161,42 @@ fun ContactsScreen(
             val pageContacts = if (page == 0) customContacts else blacklistContacts
             val isPageSelectionMode = if (page == 0) selectedContacts.isNotEmpty() else selectedBlacklistContacts.isNotEmpty()
 
-            // Contact list
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 10.dp,
-                    end = 10.dp,
-                    top = contentTopPadding + 8.dp,
-                    bottom = 240.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                if (pageContacts.isEmpty()) {
-                    item(key = "empty_state") {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-                        ) {
-                            Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                                Text(
-                                    if (page == 0) "No whitelisted numbers" else "No blacklisted numbers",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                } else {
+            if (pageContacts.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = 10.dp,
+                            end = 10.dp,
+                            top = contentTopPadding + 8.dp,
+                            bottom = 110.dp
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PromptCard(
+                        icon = if (page == 0) Icons.Default.CheckCircle else Icons.Default.Block,
+                        title = if (page == 0) "No whitelisted numbers" else "No blacklisted numbers",
+                        message = if (page == 0)
+                            "Add contacts to whitelist so messages from trusted senders are forwarded."
+                        else
+                            "Add numbers to blacklist to block messages from specific senders.",
+                        ctaText = "Add",
+                        shape = RoundedCornerShape(28.dp),
+                        onCtaClick = { showAddDialog = true }
+                    )
+                }
+            } else {
+                // Contact list
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 10.dp,
+                        end = 10.dp,
+                        top = contentTopPadding + 8.dp,
+                        bottom = 110.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     val contactList = pageContacts.toList()
                     itemsIndexed(contactList, key = { _, number -> number }) { index, number ->
                         val shape = when {
@@ -208,32 +227,34 @@ fun ContactsScreen(
             }
         }
 
-        // Custom Floating Bottom Tabs
+        // Custom Floating Bottom Bar: Segmented Tabs & Round Add Button
         AnimatedVisibility(
             visible = !isCurrentTabSelection,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp)
         ) {
-            FloatingTabs(
-                pagerState = pagerState,
-                onTabSelected = { selectedTab = it },
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-        }
+            var tabHeight by remember { mutableStateOf(56.dp) }
 
-        // FAB
-        if (!isCurrentTabSelection) {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 104.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Contact")
+                FloatingTabs(
+                    pagerState = pagerState,
+                    onTabSelected = { selectedTab = it },
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        val h = with(density) { coordinates.size.height.toDp() }
+                        if (h > 0.dp) tabHeight = h
+                    }
+                )
+
+                FloatingAddButton(
+                    size = tabHeight,
+                    onClick = { showAddDialog = true }
+                )
             }
         }
     }
@@ -404,89 +425,10 @@ fun ContactsScreen(
                     modifier = Modifier.padding(start = 4.dp)
                 )
 
-                // Horizontal grouped cards for Whitelist / Blacklist
-                val whitelistInnerCorner by animateDpAsState(
-                    targetValue = if (filterMode == "whitelist") 28.dp else 8.dp,
-                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                    label = "whitelistInnerCorner"
+                ExpressiveFilterModeToggle(
+                    selectedMode = filterMode,
+                    onModeSelected = { viewModel.setFilterMode(it) }
                 )
-                val blacklistInnerCorner by animateDpAsState(
-                    targetValue = if (filterMode == "blacklist") 28.dp else 8.dp,
-                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                    label = "blacklistInnerCorner"
-                )
-                
-                val whitelistWeight by animateFloatAsState(
-                    targetValue = if (filterMode == "whitelist") 1.2f else 1f,
-                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                    label = "whitelistWeight"
-                )
-                val blacklistWeight by animateFloatAsState(
-                    targetValue = if (filterMode == "blacklist") 1.2f else 1f,
-                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f),
-                    label = "blacklistWeight"
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        ListCard(
-                            onClick = { viewModel.setFilterMode("whitelist") },
-                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = whitelistInnerCorner, bottomStart = 28.dp, bottomEnd = whitelistInnerCorner),
-                            containerColor = if (filterMode == "whitelist") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier.weight(whitelistWeight)
-                        ) {
-                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "Whitelist",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = if (filterMode == "whitelist") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                        ListCard(
-                            onClick = { viewModel.setFilterMode("blacklist") },
-                            shape = RoundedCornerShape(topStart = blacklistInnerCorner, topEnd = 28.dp, bottomStart = blacklistInnerCorner, bottomEnd = 28.dp),
-                            containerColor = if (filterMode == "blacklist") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier.weight(blacklistWeight)
-                        ) {
-                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "Blacklist",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = if (filterMode == "blacklist") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-
-                    // Description card below the tabs
-                    ListCard(
-                        shape = RoundedCornerShape(28.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(60.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (filterMode == "whitelist")
-                                    "Only messages from contacts in the whitelist will be forwarded."
-                                else
-                                    "All messages will be forwarded except from contacts in the blacklist.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -668,14 +610,20 @@ fun FloatingTabs(
         val width1 = if (tabWidths.size > 1) tabWidths[1] else 0.dp
         val indicatorWidth = lerp(width0, width1, fraction)
 
+        // Elastic squash & stretch spring physics during movement
+        val stretchFactor = (kotlin.math.sin(fraction * Math.PI.toFloat())).coerceIn(0f, 1f)
+        val stretch = (stretchFactor * 22f).dp
+        val animatedWidth = indicatorWidth + stretch
+        val animatedOffset = indicatorOffset - (stretch / 2)
+
         Box(
             modifier = Modifier.padding(4.dp).height(IntrinsicSize.Min)
         ) {
-            if (indicatorWidth > 0.dp) {
+            if (animatedWidth > 0.dp) {
                 Box(
                     modifier = Modifier
-                        .offset(x = indicatorOffset)
-                        .width(indicatorWidth)
+                        .offset(x = animatedOffset)
+                        .width(animatedWidth)
                         .fillMaxHeight()
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer)
@@ -695,7 +643,7 @@ fun FloatingTabs(
                     onClick = { onTabSelected(1) },
                     icon = Icons.Default.Block,
                     label = "Blacklist",
-                    onWidthMeasured = { if (tabWidths[1] == 0.dp) tabWidths[1] = it }
+                    onWidthMeasured = { if (tabWidths.size > 1 && tabWidths[1] == 0.dp) tabWidths[1] = it }
                 )
             }
         }
@@ -710,29 +658,138 @@ fun FloatingTabItem(
     label: String,
     onWidthMeasured: (Dp) -> Unit
 ) {
+    val view = LocalView.current
     val contentColor by animateColorAsState(
         targetValue = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = spring(dampingRatio = 1f, stiffness = 1600f),
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 600f),
         label = "contentColor"
     )
     val density = LocalDensity.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.90f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "tabPressScale"
+    )
+
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1.15f else 0.92f,
+        animationSpec = spring(
+            dampingRatio = 0.55f,
+            stiffness = 380f
+        ),
+        label = "tabIconScale"
+    )
 
     Column(
         modifier = Modifier
             .onGloballyPositioned { onWidthMeasured(with(density) { it.size.width.toDp() }) }
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .clip(CircleShape)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onClick()
+                }
             )
             .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(20.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                }
+        )
         Spacer(modifier = Modifier.height(2.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = contentColor)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+fun FloatingAddButton(
+    size: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val view = LocalView.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "addButtonPressScale"
+    )
+
+    val iconRotation by animateFloatAsState(
+        targetValue = if (isPressed) 90f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.55f,
+            stiffness = 380f
+        ),
+        label = "addButtonIconRotation"
+    )
+
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 8.dp,
+        modifier = modifier
+            .size(size)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onClick()
+                }
+            )
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add Contact",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer {
+                        rotationZ = iconRotation
+                    }
+            )
+        }
     }
 }
 

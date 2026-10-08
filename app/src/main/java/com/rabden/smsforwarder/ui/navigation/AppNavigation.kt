@@ -45,6 +45,7 @@ import com.rabden.smsforwarder.ui.logs.LogsScreen
 import com.rabden.smsforwarder.ui.logs.LogsViewModel
 import com.rabden.smsforwarder.ui.settings.SettingsScreen
 import com.rabden.smsforwarder.ui.settings.SettingsViewModel
+import com.rabden.smsforwarder.ui.components.ExpressiveExtendedFab
 
 object Routes {
     const val LOGS = "logs"
@@ -216,16 +217,13 @@ fun AppNavigation() {
         },
         floatingActionButton = {
             if (isMainScreen && !isSelectionMode) {
-                ExtendedFloatingActionButton(
+                ExpressiveExtendedFab(
                     expanded = fabExpanded,
                     onClick = {
                         navController.navigate(Routes.CONTACTS)
-                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     },
-                    icon = { Icon(Icons.Default.Contacts, contentDescription = null) },
-                    text = { Text("Contacts") },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    icon = Icons.Default.Contacts,
+                    text = "Contacts"
                 )
             }
         }

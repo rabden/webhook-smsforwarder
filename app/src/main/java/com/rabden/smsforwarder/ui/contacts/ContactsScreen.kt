@@ -16,10 +16,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,8 +35,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.*
@@ -54,7 +60,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.rabden.smsforwarder.ui.theme.*
 import java.util.Locale
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalFoundationApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class
+)
 @Composable
 fun ContactsScreen(
     viewModel: ContactsViewModel,
@@ -281,118 +291,342 @@ fun ContactsScreen(
         )
     }
 
-    // Add contact dialog
+    // M3 Expressive Add to Whitelist / Blacklist Drawer
     if (showAddDialog) {
         var phoneNumber by remember { mutableStateOf("") }
         val focusRequester = remember { FocusRequester() }
         val listLabel = if (selectedTab == 0) "Whitelist" else "Blacklist"
+        val view = LocalView.current
+        val addSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val hasText = phoneNumber.isNotBlank()
 
-        AlertDialog(
+        val buttonInteractionSource = remember { MutableInteractionSource() }
+        val isButtonPressed by buttonInteractionSource.collectIsPressedAsState()
+        val buttonPressScale by animateFloatAsState(
+            targetValue = if (isButtonPressed) 0.88f else 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "actionButtonPressScale"
+        )
+        val buttonContainerColor by animateColorAsState(
+            targetValue = if (hasText) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = 500f),
+            label = "buttonContainerColor"
+        )
+        val buttonContentColor by animateColorAsState(
+            targetValue = if (hasText) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = 500f),
+            label = "buttonContentColor"
+        )
+
+        ModalBottomSheet(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("Add to $listLabel") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Phone number",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 12.dp)
+            sheetState = addSheetState,
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                )
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp, top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // Centered Title in Header
+                Text(
+                    text = "Add to $listLabel",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Input and Contacts/Add button side by side in same row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextField(
+                        value = phoneNumber,
+                        onValueChange = { phoneNumber = it },
+                        placeholder = { Text("e.g. 123456789 or SenderID") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .focusRequester(focusRequester),
+                        shape = CircleShape,
+                        colors = TextFieldDefaults.colors(
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            errorIndicatorColor = Color.Transparent
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = if (hasText) ImeAction.Done else ImeAction.Default
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (hasText) {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    handleAddRequest(phoneNumber)
+                                    showAddDialog = false
+                                }
+                            }
                         )
-                        TextField(
-                            value = phoneNumber,
-                            onValueChange = { phoneNumber = it },
-                            placeholder = { Text("e.g. 123456789 or SenderID") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester),
-                            shape = CircleShape,
-                            colors = TextFieldDefaults.colors(
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent,
-                                errorIndicatorColor = Color.Transparent
+                    )
+
+                    Surface(
+                        shape = CircleShape,
+                        color = buttonContainerColor,
+                        shadowElevation = if (hasText) 4.dp else 0.dp,
+                        modifier = Modifier
+                            .height(56.dp)
+                            .graphicsLayer {
+                                scaleX = buttonPressScale
+                                scaleY = buttonPressScale
+                            }
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = buttonInteractionSource,
+                                indication = null,
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    if (hasText) {
+                                        handleAddRequest(phoneNumber)
+                                        showAddDialog = false
+                                    } else {
+                                        showAddDialog = false
+                                        showPickContactDialog = true
+                                    }
+                                }
                             )
-                        )
-                    }
-
-                    FilledTonalButton(
-                        onClick = {
-                            showAddDialog = false
-                            showPickContactDialog = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.ContactPage, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Choose from contacts")
-                    }
-                }
-
-                LaunchedEffect(Unit) {
-                    focusRequester.requestFocus()
-                }
-            },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { showAddDialog = false }) {
-                        Text("Cancel")
-                    }
-                    Button(onClick = {
-                        if (phoneNumber.isNotBlank()) {
-                            handleAddRequest(phoneNumber)
-                            showAddDialog = false
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .animateContentSize(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AnimatedContent(
+                                targetState = hasText,
+                                transitionSpec = {
+                                    if (targetState) {
+                                        (fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 400f)))
+                                            .togetherWith(fadeOut(animationSpec = tween(100)) + scaleOut(targetScale = 0.5f))
+                                    } else {
+                                        (fadeIn(animationSpec = tween(200, delayMillis = 40)) + scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 400f)))
+                                            .togetherWith(fadeOut(animationSpec = tween(100)) + scaleOut(targetScale = 0.8f))
+                                    }
+                                },
+                                label = "actionButtonMorph"
+                            ) { isAdd ->
+                                if (isAdd) {
+                                    Box(
+                                        modifier = Modifier.size(56.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Add Number",
+                                            tint = buttonContentColor,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                } else {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContactPage,
+                                            contentDescription = null,
+                                            tint = buttonContentColor,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            text = "Contacts",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = buttonContentColor,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    }) {
-                        Text("Add")
                     }
                 }
             }
-        )
+
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+            }
+        }
     }
 
-    // Verify number dialog
+    // M3 Expressive Verify Number Drawer
     if (showVerifyDialog) {
-        AlertDialog(
+        val view = LocalView.current
+        val verifySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val rejectInteractionSource = remember { MutableInteractionSource() }
+        val acceptInteractionSource = remember { MutableInteractionSource() }
+
+        val isRejectPressed by rejectInteractionSource.collectIsPressedAsState()
+        val rejectEndCorner by animateDpAsState(
+            targetValue = if (isRejectPressed) 26.dp else 8.dp,
+            animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+            label = "rejectCorner"
+        )
+
+        val isAcceptPressed by acceptInteractionSource.collectIsPressedAsState()
+        val acceptStartCorner by animateDpAsState(
+            targetValue = if (isAcceptPressed) 26.dp else 8.dp,
+            animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+            label = "acceptCorner"
+        )
+
+        ModalBottomSheet(
             onDismissRequest = { showVerifyDialog = false },
-            title = { Text("Verify Number") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Is this the correct number?",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = suggestedNumber,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Adding with country code is recommended for reliability.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        if (selectedTab == 0) viewModel.addContact(pendingNumber) else viewModel.addBlacklistContact(pendingNumber)
-                        showVerifyDialog = false
-                    }) {
-                        Text("No, add as is")
+            sheetState = verifySheetState,
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                )
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 28.dp, top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // Centered Title
+                Text(
+                    text = "Verify Number",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Info card with suggested formatted number
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Is this the correct number?",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = suggestedNumber,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Adding with country code is recommended for reliability.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
                     }
-                    Button(onClick = {
-                        if (selectedTab == 0) viewModel.addContact(suggestedNumber) else viewModel.addBlacklistContact(suggestedNumber)
-                        showVerifyDialog = false
-                    }) {
-                        Text("Yes, use this")
+                }
+
+                // M3 Expressive Button Group
+                ButtonGroup(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
+                ) {
+                    FilledTonalButton(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            if (selectedTab == 0) viewModel.addContact(pendingNumber) else viewModel.addBlacklistContact(pendingNumber)
+                            showVerifyDialog = false
+                        },
+                        interactionSource = rejectInteractionSource,
+                        shape = RoundedCornerShape(
+                            topStart = 26.dp,
+                            bottomStart = 26.dp,
+                            topEnd = rejectEndCorner,
+                            bottomEnd = rejectEndCorner
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                            .animateWidth(interactionSource = rejectInteractionSource)
+                    ) {
+                        Text("No, add as is", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            if (selectedTab == 0) viewModel.addContact(suggestedNumber) else viewModel.addBlacklistContact(suggestedNumber)
+                            showVerifyDialog = false
+                        },
+                        interactionSource = acceptInteractionSource,
+                        shape = RoundedCornerShape(
+                            topStart = acceptStartCorner,
+                            bottomStart = acceptStartCorner,
+                            topEnd = 26.dp,
+                            bottomEnd = 26.dp
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                            .animateWidth(interactionSource = acceptInteractionSource)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Yes, use this", fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
             }
-        )
+        }
     }
 
     // Pick contact launcher
@@ -492,7 +726,11 @@ fun CustomContactItem(
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
+@OptIn(
+    ExperimentalAnimationApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class
+)
 @Composable
 fun ContactDetailDialog(
     contactNumber: String,
@@ -505,84 +743,246 @@ fun ContactDetailDialog(
         mutableStateOf(TextFieldValue(contactNumber, TextRange(contactNumber.length)))
     }
     val focusRequester = remember { FocusRequester() }
+    val view = LocalView.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    AlertDialog(
+    val cancelInteractionSource = remember { MutableInteractionSource() }
+    val confirmInteractionSource = remember { MutableInteractionSource() }
+    val deleteInteractionSource = remember { MutableInteractionSource() }
+    val editInteractionSource = remember { MutableInteractionSource() }
+
+    val isCancelPressed by cancelInteractionSource.collectIsPressedAsState()
+    val cancelEndCorner by animateDpAsState(
+        targetValue = if (isCancelPressed) 28.dp else 6.dp,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+        label = "cancelEndCorner"
+    )
+
+    val isConfirmPressed by confirmInteractionSource.collectIsPressedAsState()
+    val confirmStartCorner by animateDpAsState(
+        targetValue = if (isConfirmPressed) 28.dp else 6.dp,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+        label = "confirmStartCorner"
+    )
+
+    val isDeletePressed by deleteInteractionSource.collectIsPressedAsState()
+    val deleteEndCorner by animateDpAsState(
+        targetValue = if (isDeletePressed) 28.dp else 6.dp,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+        label = "deleteEndCorner"
+    )
+
+    val isEditPressed by editInteractionSource.collectIsPressedAsState()
+    val editStartCorner by animateDpAsState(
+        targetValue = if (isEditPressed) 28.dp else 6.dp,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 400f),
+        label = "editStartCorner"
+    )
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEditing) "Edit Contact" else "Contact Info") },
-        text = {
-            Box(modifier = Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.CenterStart) {
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp, top = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // Centered Title
+            Text(
+                text = if (isEditing) "Edit Contact" else "Contact Info",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // Input box prefilled + action icon buttons beside it
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextField(
+                    value = editValue,
+                    onValueChange = { editValue = it },
+                    readOnly = !isEditing,
+                    singleLine = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .focusRequester(focusRequester),
+                    shape = CircleShape,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        errorIndicatorColor = Color.Transparent
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = if (isEditing) ImeAction.Done else ImeAction.Default
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (isEditing && editValue.text.isNotBlank()) {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                onUpdate(contactNumber, editValue.text)
+                            }
+                        }
+                    )
+                )
+
                 AnimatedContent(
                     targetState = isEditing,
                     transitionSpec = {
-                        if (targetState) {
-                            (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
-                        } else {
-                            (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
-                        }.using(SizeTransform(clip = false))
+                        (fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.7f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 400f)))
+                            .togetherWith(fadeOut(animationSpec = tween(100)) + scaleOut(targetScale = 0.7f))
                     },
-                    label = "SwooshTransition"
-                ) { targetEditing ->
-                    if (targetEditing) {
-                        TextField(
-                            value = editValue,
-                            onValueChange = { editValue = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester),
-                            singleLine = true,
-                            shape = CircleShape,
-                            colors = TextFieldDefaults.colors(
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent,
-                                errorIndicatorColor = Color.Transparent
-                            )
-                        )
-                        LaunchedEffect(Unit) {
-                            focusRequester.requestFocus()
+                    label = "actionButtonsTransition"
+                ) { editing ->
+                    ButtonGroup(horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+                        if (editing) {
+                            FilledTonalIconButton(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    editValue = TextFieldValue(contactNumber, TextRange(contactNumber.length))
+                                    isEditing = false
+                                },
+                                interactionSource = cancelInteractionSource,
+                                shape = RoundedCornerShape(
+                                    topStart = 28.dp,
+                                    bottomStart = 28.dp,
+                                    topEnd = cancelEndCorner,
+                                    bottomEnd = cancelEndCorner
+                                ),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .animateWidth(interactionSource = cancelInteractionSource)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cancel edit",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            FilledIconButton(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    if (editValue.text.isNotBlank()) {
+                                        onUpdate(contactNumber, editValue.text)
+                                    }
+                                },
+                                interactionSource = confirmInteractionSource,
+                                shape = RoundedCornerShape(
+                                    topStart = confirmStartCorner,
+                                    bottomStart = confirmStartCorner,
+                                    topEnd = 28.dp,
+                                    bottomEnd = 28.dp
+                                ),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .animateWidth(interactionSource = confirmInteractionSource)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Confirm edit",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        } else {
+                            FilledTonalIconButton(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    onDelete(contactNumber)
+                                },
+                                interactionSource = deleteInteractionSource,
+                                shape = RoundedCornerShape(
+                                    topStart = 28.dp,
+                                    bottomStart = 28.dp,
+                                    topEnd = deleteEndCorner,
+                                    bottomEnd = deleteEndCorner
+                                ),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .animateWidth(interactionSource = deleteInteractionSource)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete contact",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            FilledTonalIconButton(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    editValue = TextFieldValue(contactNumber, TextRange(contactNumber.length))
+                                    isEditing = true
+                                },
+                                interactionSource = editInteractionSource,
+                                shape = RoundedCornerShape(
+                                    topStart = editStartCorner,
+                                    bottomStart = editStartCorner,
+                                    topEnd = 28.dp,
+                                    bottomEnd = 28.dp
+                                ),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .animateWidth(interactionSource = editInteractionSource)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit contact",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
-                    } else {
-                        Text(
-                            text = contactNumber,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
                     }
                 }
             }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+            LaunchedEffect(isEditing) {
                 if (isEditing) {
-                    TextButton(onClick = { isEditing = false }) {
-                        Text("Cancel")
-                    }
-                    Button(onClick = {
-                        if (editValue.text.isNotBlank()) {
-                            onUpdate(contactNumber, editValue.text)
-                        }
-                    }) {
-                        Text("Confirm")
-                    }
-                } else {
-                    TextButton(
-                        onClick = { onDelete(contactNumber) },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Delete")
-                    }
-                    Button(onClick = { isEditing = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Edit")
-                    }
+                    focusRequester.requestFocus()
                 }
             }
         }
-    )
+    }
 }
 
 @Composable
